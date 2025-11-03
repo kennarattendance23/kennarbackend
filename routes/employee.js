@@ -21,13 +21,13 @@ const upload = multer({ storage });
 // === Serve employee image (supports both LONGBLOB and filename) ===
 router.get("/:employee_id/image", (req, res) => {
   const employeeId = req.params.employee_id;
-  db.query("SELECT image FROM employees WHERE employee_id = ?", [employeeId], (err, results) => {
+  db.query("SELECT image, image_mime FROM employees WHERE employee_id = ?", [employeeId], (err, results) => {
     if (err) return res.status(500).json({ error: "Database error" });
     if (!results.length || !results[0].image) {
       return res.status(404).json({ error: "No image found for this employee" });
     }
     const imgBuffer = results[0].image;
-    let mimeType = "image/jpeg";
+    const mimeType = results[0].image_mime || "image/jpeg";
     const base64Img = imgBuffer.toString("base64");
     res.json({ base64: `data:${mimeType};base64,${base64Img}` });
   });
