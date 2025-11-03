@@ -62,15 +62,17 @@ router.post("/", upload.single("image"), async (req, res) => {
     }
 
     let image = null;
+    let image_mime = null;
     if (req.file) {
       image = fs.readFileSync(req.file.path);
+      image_mime = req.file.mimetype;
       fs.unlinkSync(req.file.path);
     }
 
     const sql = `
       INSERT INTO employees 
-      (employee_id, name, mobile_phone, date_of_birth, image, face_embedding, fingerprint_id, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (employee_id, name, mobile_phone, date_of_birth, image, image_mime, face_embedding, fingerprint_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await db.query(sql, [
       employee_id,
@@ -78,6 +80,7 @@ router.post("/", upload.single("image"), async (req, res) => {
       mobile_phone || null,
       date_of_birth || null,
       image || null,
+      image_mime || null,
       face_embedding || null,
       fingerprint_id || null,
       status || "Active",
@@ -108,8 +111,10 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
     } = req.body;
 
     let image = null;
+    let image_mime = null;
     if (req.file) {
       image = fs.readFileSync(req.file.path);
+      image_mime = req.file.mimetype;
       fs.unlinkSync(req.file.path);
     }
 
@@ -126,8 +131,8 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
     ];
 
     if (image) {
-      query += `, image=?`;
-      params.push(image);
+      query += `, image=?, image_mime=?`;
+      params.push(image, image_mime);
     }
 
     query += ` WHERE employee_id=?`;
