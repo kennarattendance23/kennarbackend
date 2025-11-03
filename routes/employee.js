@@ -67,7 +67,8 @@ router.post("/", upload.single("image"), async (req, res) => {
       return res.status(400).json({ error: "Employee ID and Name are required" });
     }
 
-    const image = req.file ? req.file.filename : null;
+    // Store actual image BLOB, not filename
+    const image = req.file ? fs.readFileSync(req.file.path) : null;
 
     const sql = `
       INSERT INTO employees 
@@ -109,7 +110,8 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
       fingerprint_id,
     } = req.body;
 
-    const image = req.file ? req.file.filename : null;
+    // Store actual image BLOB, not filename
+    const image = req.file ? fs.readFileSync(req.file.path) : null;
 
     let query = `
       UPDATE employees
