@@ -128,8 +128,23 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
       fingerprint_id,
     } = req.body;
 
-    // Store actual image BLOB, not filename
-    const image = req.file ? fs.readFileSync(req.file.path) : null;
+    // Ensure uploads folder exists
+    const uploadsDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir);
+    }
+
+    let image = null;
+    if (req.file) {
+      try {
+        image = fs.readFileSync(req.file.path);
+        // Delete file after reading
+        fs.unlinkSync(req.file.path);
+      } catch (err) {
+        console.error("❌ Error reading uploaded image file:", err);
+        return res.status(500).json({ error: "Error processing uploaded image" });
+      }
+    }
 
     let query = `
       UPDATE employees
