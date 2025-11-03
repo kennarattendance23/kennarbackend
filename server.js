@@ -54,7 +54,7 @@ server.listen(PORT, () => {
 });
 
 // Serve employee image BLOB as base64
-app.get('https://kennarbackend.onrender.com/api/employees/:employee_id/image', (req, res) => {
+app.get('/api/employees/:employee_id/image', (req, res) => {
   const employeeId = req.params.employee_id;
   pool.query('SELECT image FROM employees WHERE employee_id = ?', [employeeId], (err, results) => {
     if (err) return res.status(500).json({ error: 'Database error' });
