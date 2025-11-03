@@ -32,23 +32,10 @@ router.get("/:employee_id/image", (req, res) => {
       return res.status(404).json({ error: "No image found for this employee" });
     }
 
-    const imageData = results[0].image;
-
-    
-    if (typeof imageData === "string") {
-      const imagePath = path.join("uploads", imageData);
-      if (fs.existsSync(imagePath)) {
-        const imgBuffer = fs.readFileSync(imagePath);
-        const base64Img = imgBuffer.toString("base64");
-        return res.json({ base64: base64Img });
-      } else {
-        return res.status(404).json({ error: "Image file not found on server" });
-      }
-    }
-
-    
-    const base64Img = imageData.toString("base64");
-    res.json({ base64: base64Img });
+    const imgBuffer = results[0].image;
+    let mimeType = "image/jpeg";
+    const base64Img = imgBuffer.toString("base64");
+    res.json({ base64: `data:${mimeType};base64,${base64Img}` });
   });
 });
 
