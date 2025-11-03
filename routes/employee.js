@@ -35,9 +35,6 @@ router.get("/:employee_id/image", (req, res) => {
     const imgBuffer = results[0].image;
     let mimeType = "image/jpeg";
     const base64Img = imgBuffer.toString("base64");
-    // Debug logging
-    console.log(`Image BLOB size: ${imgBuffer.length} bytes`);
-    console.log(`Base64 sample: ${base64Img.substring(0, 100)}...`);
     res.json({ base64: `data:${mimeType};base64,${base64Img}` });
   });
 });
@@ -70,23 +67,7 @@ router.post("/", upload.single("image"), async (req, res) => {
       return res.status(400).json({ error: "Employee ID and Name are required" });
     }
 
-    // Ensure uploads folder exists
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir);
-    }
-
-    let image = null;
-    if (req.file) {
-      try {
-        image = fs.readFileSync(req.file.path);
-        // Delete file after reading
-        fs.unlinkSync(req.file.path);
-      } catch (err) {
-        console.error("❌ Error reading uploaded image file:", err);
-        return res.status(500).json({ error: "Error processing uploaded image" });
-      }
-    }
+    const image = req.file ? req.file.filename : null;
 
     const sql = `
       INSERT INTO employees 
@@ -128,23 +109,7 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
       fingerprint_id,
     } = req.body;
 
-    // Ensure uploads folder exists
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir);
-    }
-
-    let image = null;
-    if (req.file) {
-      try {
-        image = fs.readFileSync(req.file.path);
-        // Delete file after reading
-        fs.unlinkSync(req.file.path);
-      } catch (err) {
-        console.error("❌ Error reading uploaded image file:", err);
-        return res.status(500).json({ error: "Error processing uploaded image" });
-      }
-    }
+    const image = req.file ? req.file.filename : null;
 
     let query = `
       UPDATE employees
