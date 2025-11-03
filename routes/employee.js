@@ -21,34 +21,15 @@ const upload = multer({ storage });
 // === Serve employee image (supports both LONGBLOB and filename) ===
 router.get("/:employee_id/image", (req, res) => {
   const employeeId = req.params.employee_id;
-
   db.query("SELECT image FROM employees WHERE employee_id = ?", [employeeId], (err, results) => {
-    if (err) {
-      console.error("❌ Database error fetching image:", err);
-      return res.status(500).json({ error: "Database error" });
-    }
-
+    if (err) return res.status(500).json({ error: "Database error" });
     if (!results.length || !results[0].image) {
       return res.status(404).json({ error: "No image found for this employee" });
     }
-
-    const imageData = results[0].image;
-
-    // Case 1: If the 'image' column stores a filename (string)
-    if (typeof imageData === "string") {
-      const imagePath = path.join("uploads", imageData);
-      if (fs.existsSync(imagePath)) {
-        const imgBuffer = fs.readFileSync(imagePath);
-        const base64Img = imgBuffer.toString("base64");
-        return res.json({ base64: base64Img });
-      } else {
-        return res.status(404).json({ error: "Image file not found on server" });
-      }
-    }
-
-    // Case 2: If the 'image' column stores binary data (LONGBLOB)
-    const base64Img = imageData.toString("base64");
-    res.json({ base64: base64Img });
+    const imgBuffer = results[0].image;
+    let mimeType = "image/jpeg";
+    const base64Img = imgBuffer.toString("base64");
+    res.json({ base64: `data:${mimeType};base64,${base64Img}` });
   });
 });
 
@@ -80,7 +61,11 @@ router.post("/", upload.single("image"), async (req, res) => {
       return res.status(400).json({ error: "Employee ID and Name are required" });
     }
 
-    const image = req.file ? req.file.filename : null;
+    let image = null;
+    if (req.file) {
+      image = fs.readFileSync(req.file.path);
+      fs.unlinkSync(req.file.path);
+    }
 
     const sql = `
       INSERT INTO employees 
@@ -122,7 +107,11 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
       fingerprint_id,
     } = req.body;
 
-    const image = req.file ? req.file.filename : null;
+    let image = null;
+    if (req.file) {
+      image = fs.readFileSync(req.file.path);
+      fs.unlinkSync(req.file.path);
+    }
 
     let query = `
       UPDATE employees
