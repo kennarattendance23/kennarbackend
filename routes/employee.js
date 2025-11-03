@@ -6,10 +6,10 @@ import db from "../config/database.js";
 
 const router = express.Router();
 
-
+// === For image upload ===
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "uploads/"); 
+    cb(null, "uploads/"); // store uploaded files in /uploads folder
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -18,7 +18,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-
+// === Serve employee image (supports both LONGBLOB and filename) ===
 router.get("/:employee_id/image", (req, res) => {
   const employeeId = req.params.employee_id;
 
@@ -32,14 +32,27 @@ router.get("/:employee_id/image", (req, res) => {
       return res.status(404).json({ error: "No image found for this employee" });
     }
 
-    const imgBuffer = results[0].image;
-    let mimeType = "image/jpeg";
-    const base64Img = imgBuffer.toString("base64");
-    res.json({ base64: `data:${mimeType};base64,${base64Img}` });
+    const imageData = results[0].image;
+
+    // Case 1: If the 'image' column stores a filename (string)
+    if (typeof imageData === "string") {
+      const imagePath = path.join("uploads", imageData);
+      if (fs.existsSync(imagePath)) {
+        const imgBuffer = fs.readFileSync(imagePath);
+        const base64Img = imgBuffer.toString("base64");
+        return res.json({ base64: base64Img });
+      } else {
+        return res.status(404).json({ error: "Image file not found on server" });
+      }
+    }
+
+    // Case 2: If the 'image' column stores binary data (LONGBLOB)
+    const base64Img = imageData.toString("base64");
+    res.json({ base64: base64Img });
   });
 });
 
-
+// === Get all employees ===
 router.get("/", async (req, res) => {
   try {
     const [rows] = await db.query("SELECT * FROM employees");
@@ -50,7 +63,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-
+// === Add new employee ===
 router.post("/", upload.single("image"), async (req, res) => {
   try {
     const {
@@ -96,7 +109,7 @@ router.post("/", upload.single("image"), async (req, res) => {
   }
 });
 
-
+// === Update employee ===
 router.put("/:employee_id", upload.single("image"), async (req, res) => {
   try {
     const { employee_id } = req.params;
@@ -144,15 +157,15 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
   }
 });
 
-
+// === Delete employee ===
 router.delete("/:employee_id", async (req, res) => {
   try {
     const { employee_id } = req.params;
 
-
+    // Delete attendance logs first
     await db.query("DELETE FROM attendance WHERE employee_id = ?", [employee_id]);
 
-   
+    // Delete employee record
     const [result] = await db.query("DELETE FROM employees WHERE employee_id = ?", [employee_id]);
 
     if (result.affectedRows === 0) {

@@ -52,19 +52,3 @@ app.get("/", (req, res) => {
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
-
-// Serve employee image BLOB as base64
-app.get('/api/employees/:employee_id/image', (req, res) => {
-  const employeeId = req.params.employee_id;
-  pool.query('SELECT image FROM employees WHERE employee_id = ?', [employeeId], (err, results) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    if (!results.length || !results[0].image) {
-      return res.status(404).json({ error: 'No image found' });
-    }
-    const imgBuffer = results[0].image;
-    let mimeType = 'image/jpeg';
-    console.log(`Image BLOB size: ${imgBuffer.length} bytes`);
-    console.log(`Base64 sample: ${imgBuffer.toString('base64').substring(0, 100)}...`);
-    res.json({ base64: `data:${mimeType};base64,${imgBuffer.toString('base64')}` });
-  });
-});
