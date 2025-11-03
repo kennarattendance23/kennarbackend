@@ -59,12 +59,24 @@ app.get('/api/employees/:employee_id/image', (req, res) => {
   pool.query('SELECT image FROM employees WHERE employee_id = ?', [employeeId], (err, results) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     if (!results.length || !results[0].image) {
-      return res.status(404).json({ error: 'No image found' });
+        // Return a 1x1 transparent PNG as a placeholder
+        const transparentPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+F2ZcAAAAASUVORK5CYII=';
+        return res.send(`data:image/png;base64,${transparentPng}`);
     }
     const imgBuffer = results[0].image;
     let mimeType = 'image/jpeg';
     console.log(`Image BLOB size: ${imgBuffer.length} bytes`);
     console.log(`Base64 sample: ${imgBuffer.toString('base64').substring(0, 100)}...`);
-    res.json({ base64: `data:${mimeType};base64,${imgBuffer.toString('base64')}` });
+      // Try to detect PNG/JPEG by magic number
+      if (imgBuffer[0] === 0x89 && imgBuffer[1] === 0x50) {
+          mimeType = 'image/png';
+      }
+      const base64Image = imgBuffer.toString('base64');
+      // If base64 is empty, return placeholder
+      if (!base64Image || base64Image.length < 10) {
+          const transparentPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+F2ZcAAAAASUVORK5CYII=';
+          return res.send(`data:image/png;base64,${transparentPng}`);
+      }
+      res.send(`data:${mimeType};base64,${base64Image}`);
   });
 });
