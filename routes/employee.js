@@ -35,6 +35,9 @@ router.get("/:employee_id/image", (req, res) => {
     const imgBuffer = results[0].image;
     let mimeType = "image/jpeg";
     const base64Img = imgBuffer.toString("base64");
+    // Debug logging
+    console.log(`Image BLOB size: ${imgBuffer.length} bytes`);
+    console.log(`Base64 sample: ${base64Img.substring(0, 100)}...`);
     res.json({ base64: `data:${mimeType};base64,${base64Img}` });
   });
 });
