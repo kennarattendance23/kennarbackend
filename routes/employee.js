@@ -21,15 +21,34 @@ const upload = multer({ storage });
 // === Serve employee image (supports both LONGBLOB and filename) ===
 router.get("/:employee_id/image", (req, res) => {
   const employeeId = req.params.employee_id;
-  db.query("SELECT image, image_mime FROM employees WHERE employee_id = ?", [employeeId], (err, results) => {
-    if (err) return res.status(500).json({ error: "Database error" });
+
+  db.query("SELECT image FROM employees WHERE employee_id = ?", [employeeId], (err, results) => {
+    if (err) {
+      console.error("❌ Database error fetching image:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
     if (!results.length || !results[0].image) {
       return res.status(404).json({ error: "No image found for this employee" });
     }
-    const imgBuffer = results[0].image;
-    const mimeType = results[0].image_mime || "image/jpeg";
-    const base64Img = imgBuffer.toString("base64");
-    res.json({ base64: `data:${mimeType};base64,${base64Img}` });
+
+    const imageData = results[0].image;
+
+    // Case 1: If the 'image' column stores a filename (string)
+    if (typeof imageData === "string") {
+      const imagePath = path.join("uploads", imageData);
+      if (fs.existsSync(imagePath)) {
+        const imgBuffer = fs.readFileSync(imagePath);
+        const base64Img = imgBuffer.toString("base64");
+        return res.json({ base64: base64Img });
+      } else {
+        return res.status(404).json({ error: "Image file not found on server" });
+      }
+    }
+
+    // Case 2: If the 'image' column stores binary data (LONGBLOB)
+    const base64Img = imageData.toString("base64");
+    res.json({ base64: base64Img });
   });
 });
 
@@ -61,18 +80,12 @@ router.post("/", upload.single("image"), async (req, res) => {
       return res.status(400).json({ error: "Employee ID and Name are required" });
     }
 
-    let image = null;
-    let image_mime = null;
-    if (req.file) {
-      image = fs.readFileSync(req.file.path);
-      image_mime = req.file.mimetype;
-      fs.unlinkSync(req.file.path);
-    }
+    const image = req.file ? req.file.filename : null;
 
     const sql = `
       INSERT INTO employees 
-      (employee_id, name, mobile_phone, date_of_birth, image, image_mime, face_embedding, fingerprint_id, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (employee_id, name, mobile_phone, date_of_birth, image, face_embedding, fingerprint_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await db.query(sql, [
       employee_id,
@@ -80,7 +93,6 @@ router.post("/", upload.single("image"), async (req, res) => {
       mobile_phone || null,
       date_of_birth || null,
       image || null,
-      image_mime || null,
       face_embedding || null,
       fingerprint_id || null,
       status || "Active",
@@ -110,13 +122,7 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
       fingerprint_id,
     } = req.body;
 
-    let image = null;
-    let image_mime = null;
-    if (req.file) {
-      image = fs.readFileSync(req.file.path);
-      image_mime = req.file.mimetype;
-      fs.unlinkSync(req.file.path);
-    }
+    const image = req.file ? req.file.filename : null;
 
     let query = `
       UPDATE employees
@@ -131,8 +137,8 @@ router.put("/:employee_id", upload.single("image"), async (req, res) => {
     ];
 
     if (image) {
-      query += `, image=?, image_mime=?`;
-      params.push(image, image_mime);
+      query += `, image=?`;
+      params.push(image);
     }
 
     query += ` WHERE employee_id=?`;
