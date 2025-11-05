@@ -5,32 +5,37 @@ import pool from "../config/database.js";
 const router = express.Router();
 
 // ======================================
-// ✅ GET: Attendance Report (Simple Status)
+// ✅ GET: Attendance Report with Absentees
 // ======================================
 router.get("/attendance", async (req, res) => {
   const sql = `
     SELECT 
-      id AS attendance_id,
-      employee_id, 
-      fullname, 
-      date, 
-      temperature,
-      time_in,
-      time_out,
-      -- ✅ Determine Status: Absent / Late / Present
+      e.employee_id,
+      e.fullname,
+      d.date,
+      a.id AS attendance_id,
+      a.temperature,
+      a.time_in,
+      a.time_out,
+      -- ✅ Determine Status
       CASE 
-        WHEN time_in IS NULL THEN 'Absent'
-        WHEN TIME(time_in) > '08:15' THEN 'Late'
+        WHEN a.time_in IS NULL THEN 'Absent'
+        WHEN TIME(a.time_in) > '08:15' THEN 'Late'
         ELSE 'Present'
       END AS status,
       -- ✅ Compute working hours safely
       CASE
-        WHEN time_in IS NOT NULL AND time_out IS NOT NULL
-        THEN ROUND(TIME_TO_SEC(TIMEDIFF(time_out, time_in)) / 3600, 2)
+        WHEN a.time_in IS NOT NULL AND a.time_out IS NOT NULL
+        THEN ROUND(TIME_TO_SEC(TIMEDIFF(a.time_out, a.time_in)) / 3600, 2)
         ELSE NULL
       END AS working_hours
-    FROM attendance
-    ORDER BY id DESC
+    FROM employees e
+    CROSS JOIN (
+      SELECT DISTINCT date FROM attendance
+    ) AS d
+    LEFT JOIN attendance a 
+      ON e.employee_id = a.employee_id AND a.date = d.date
+    ORDER BY d.date DESC, e.employee_id;
   `;
 
   try {
@@ -43,7 +48,7 @@ router.get("/attendance", async (req, res) => {
 });
 
 // ======================================
-// ✅ PUT: Update Attendance (time_out, working_hours)
+// ✅ PUT: Update Attendance
 // ======================================
 router.put("/attendance/:id", async (req, res) => {
   const attendanceId = req.params.id;
