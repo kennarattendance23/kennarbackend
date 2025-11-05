@@ -5,7 +5,7 @@ import pool from "../config/database.js";
 const router = express.Router();
 
 // ======================================
-// ✅ GET: Attendance Report (Simple Status)
+// ✅ GET: Attendance Report (Filtered)
 // ======================================
 router.get("/attendance", async (req, res) => {
   const sql = `
@@ -17,9 +17,9 @@ router.get("/attendance", async (req, res) => {
       temperature,
       time_in,
       time_out,
-      -- ✅ Determine Status: Absent / Late / Present
+      -- ✅ Determine Status (only Present, Late, Absent)
       CASE 
-        WHEN time_in IS NULL THEN 'Absent'
+        WHEN time_in IS NULL AND CURTIME() >= '17:00:00' THEN 'Absent'
         WHEN TIME(time_in) > '08:15' THEN 'Late'
         ELSE 'Present'
       END AS status,
@@ -30,6 +30,12 @@ router.get("/attendance", async (req, res) => {
         ELSE NULL
       END AS working_hours
     FROM attendance
+    WHERE 
+      -- ✅ Include only Present or Late
+      time_in IS NOT NULL
+      OR
+      -- ✅ Include Absent only if after 5 PM
+      (time_in IS NULL AND CURTIME() >= '17:00:00')
     ORDER BY id DESC
   `;
 
