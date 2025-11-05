@@ -1,4 +1,3 @@
-
 // routes/report.js
 import express from "express";
 import pool from "../config/database.js"; // ES Module import
@@ -6,35 +5,42 @@ import pool from "../config/database.js"; // ES Module import
 const router = express.Router();
 
 // ==============================
-// GET: Attendance Reports
+// GET: Attendance Reports (with absentees)
 // ==============================
 router.get("/attendance", async (req, res) => {
   const sql = `
     SELECT 
-      id AS attendance_id,       -- map "id" to "attendance_id" for frontend
-      employee_id, 
-      fullname, 
-      date, 
-      temperature,
-      time_in, 
-      time_out,
-      status,
-      -- Dynamic IN Status
+      e.employee_id,
+      e.fullname,
+      a.id AS attendance_id,
+      DATE(a.date) AS date,
+      a.temperature,
+      a.time_in,
+      a.time_out,
+      a.status,
+      -- IN Status
       CASE 
-        WHEN TIME(time_in) > '08:15' THEN 'Late'
-        WHEN TIME(time_in) <= '07:59' THEN 'Early In'
+        WHEN a.employee_id IS NULL THEN 'Absent'
+        WHEN TIME(a.time_in) > '08:15' THEN 'Late'
+        WHEN TIME(a.time_in) <= '07:59' THEN 'Early In'
         ELSE 'On Time'
       END AS in_status,
-      -- Dynamic OUT Status
+      -- OUT Status
       CASE 
-        WHEN TIME(time_out) < '17:00' THEN 'Early Out'
-        WHEN TIME(time_out) > '18:00' THEN 'Overtime'
+        WHEN a.employee_id IS NULL THEN 'Absent'
+        WHEN TIME(a.time_out) < '17:00' THEN 'Early Out'
+        WHEN TIME(a.time_out) > '18:00' THEN 'Overtime'
         ELSE 'On Time'
       END AS out_status,
-      -- Calculate working hours
-      ROUND(TIME_TO_SEC(TIMEDIFF(time_out, time_in)) / 3600, 2) AS working_hours
-    FROM attendance
-    ORDER BY id DESC
+      -- Working Hours
+      CASE 
+        WHEN a.employee_id IS NULL THEN 0
+        ELSE ROUND(TIME_TO_SEC(TIMEDIFF(a.time_out, a.time_in)) / 3600, 2)
+      END AS working_hours
+    FROM employees e
+    LEFT JOIN attendance a 
+      ON e.employee_id = a.employee_id
+    ORDER BY e.employee_id ASC, DATE(a.date) DESC
   `;
 
   try {
