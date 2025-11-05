@@ -1,78 +1,75 @@
-// routes/report.js
 import express from "express";
-import pool from "../config/database.js";
+import db from "../config/db.js";
 
 const router = express.Router();
 
-// ======================================
-// ✅ GET: Attendance Report with Absentees
-// ======================================
-router.get("/attendance", async (req, res) => {
-  const sql = `
-    SELECT 
-      e.employee_id,
-      e.fullname,
-      d.date,
-      a.id AS attendance_id,
-      a.temperature,
-      a.time_in,
-      a.time_out,
-      -- ✅ Determine Status
-      CASE 
-        WHEN a.time_in IS NULL THEN 'Absent'
-        WHEN TIME(a.time_in) > '08:15' THEN 'Late'
-        ELSE 'Present'
-      END AS status,
-      -- ✅ Compute working hours safely
-      CASE
-        WHEN a.time_in IS NOT NULL AND a.time_out IS NOT NULL
-        THEN ROUND(TIME_TO_SEC(TIMEDIFF(a.time_out, a.time_in)) / 3600, 2)
-        ELSE NULL
-      END AS working_hours
-    FROM employees e
-    CROSS JOIN (
-      SELECT DISTINCT date FROM attendance
-    ) AS d
-    LEFT JOIN attendance a 
-      ON e.employee_id = a.employee_id AND a.date = d.date
-    ORDER BY d.date DESC, e.employee_id;
-  `;
-
+// GET attendance report with absentees included
+router.get("/report", async (req, res) => {
   try {
-    const [results] = await pool.query(sql);
-    res.json(results);
-  } catch (err) {
-    console.error("❌ Error fetching attendance:", err);
-    res.status(500).json({ error: "Failed to fetch attendance report" });
-  }
-});
+    const { startDate, endDate } = req.query;
 
-// ======================================
-// ✅ PUT: Update Attendance
-// ======================================
-router.put("/attendance/:id", async (req, res) => {
-  const attendanceId = req.params.id;
-  const { time_out, working_hours } = req.body;
+    // Date filter condition
+    let dateCondition = "";
+    let params = [];
 
-  if (!time_out || working_hours === undefined) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-
-  const sql = `
-    UPDATE attendance 
-    SET time_out = ?, working_hours = ?
-    WHERE id = ?
-  `;
-
-  try {
-    const [result] = await pool.query(sql, [time_out, working_hours, attendanceId]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Attendance record not found" });
+    if (startDate && endDate) {
+      dateCondition = "WHERE a.date BETWEEN ? AND ?";
+      params.push(startDate, endDate);
     }
-    res.json({ message: "✅ Attendance updated successfully" });
-  } catch (err) {
-    console.error("❌ Error updating attendance:", err);
-    res.status(500).json({ error: "Failed to update attendance" });
+
+    // Get all dates from attendance
+    const [dates] = await db.query(`
+      SELECT DISTINCT date FROM attendance ORDER BY date DESC
+    `);
+
+    // Get all active employees
+    const [employees] = await db.query(`
+      SELECT employee_id, name FROM employees WHERE status = 'Active'
+    `);
+
+    let results = [];
+
+    for (const d of dates) {
+      const date = d.date;
+
+      // Get attendance records for that date
+      const [attended] = await db.query(
+        `SELECT a.*, e.name AS fullname
+         FROM attendance a
+         JOIN employees e ON a.employee_id = e.employee_id
+         WHERE a.date = ?`,
+        [date]
+      );
+
+      // Get absentees by comparing all active employees with those who attended
+      const attendedIDs = attended.map((a) => a.employee_id);
+      const absentees = employees
+        .filter((emp) => !attendedIDs.includes(emp.employee_id))
+        .map((emp) => ({
+          date,
+          employee_id: emp.employee_id,
+          fullname: emp.name,
+          temperature: null,
+          status: "Absent",
+          time_in: null,
+          time_out: null,
+          working_hours: null,
+        }));
+
+      results.push(...attended, ...absentees);
+    }
+
+    // Apply date filter if provided
+    if (startDate && endDate) {
+      results = results.filter(
+        (r) => r.date >= startDate && r.date <= endDate
+      );
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error("Error fetching report:", error);
+    res.status(500).json({ error: "Failed to fetch report" });
   }
 });
 
