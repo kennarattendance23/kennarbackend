@@ -4,22 +4,35 @@ import pool from "../config/database.js";
 
 const router = express.Router();
 
+// Helper: parse a time string "HH:MM" or "HH:MM:SS" into seconds since midnight
+function timeStringToSeconds(t) {
+  if (t == null) return null;
+  const parts = t.split(":").map((p) => parseInt(p, 10));
+  if (parts.length === 2) parts.push(0);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const [hh, mm, ss] = parts;
+  return hh * 3600 + mm * 60 + ss;
+}
+
 // ======================================
-// ✅ GET: Attendance Report (Filtered)
+// ✅ GET: Attendance Report (reads stored status)
 // ======================================
 router.get("/attendance", async (req, res) => {
   const sql = `
-    SELECT 
+    SELECT
       id AS attendance_id,
-      employee_id, 
-      fullname, 
-      date, 
+      employee_id,
+      fullname,
+      date,
       temperature,
       time_in,
       time_out,
       status,
       working_hours
     FROM attendance
+    WHERE
+      status <> 'Absent'
+      OR (status = 'Absent' AND CURTIME() >= '17:00:00')
     ORDER BY id DESC
   `;
 
@@ -32,61 +45,107 @@ router.get("/attendance", async (req, res) => {
   }
 });
 
-
 // ======================================
-// ✅ PUT: Update Attendance (time_in, time_out)
-// ✅ Automatically updates STATUS + WORKING HOURS
+// ✅ PUT: Update time_out (existing route)
 // ======================================
 router.put("/attendance/:id", async (req, res) => {
   const attendanceId = req.params.id;
-  const { time_in, time_out } = req.body;
+  const { time_out, working_hours } = req.body;
+
+  if (!time_out || working_hours === undefined) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  const sql = `
+    UPDATE attendance
+    SET time_out = ?, working_hours = ?
+    WHERE id = ?
+  `;
 
   try {
-    // 1️⃣ Fetch existing record first
-    const [rows] = await pool.query(`SELECT * FROM attendance WHERE id = ?`, [attendanceId]);
-    if (rows.length === 0) return res.status(404).json({ error: "Attendance record not found" });
-
-    const record = rows[0];
-
-    // 2️⃣ Decide the new status based on time_in logic
-    let newStatus = record.status;
-
-    if (time_in) {
-      // Convert time_in to compare
-      if (time_in <= "08:15:00") newStatus = "Present";
-      else newStatus = "Late";
-    } else {
-      // No time_in: check if it's already 5PM or later
-      const now = new Date();
-      const currentTime = now.toTimeString().slice(0, 8);
-
-      if (currentTime >= "17:00:00") newStatus = "Absent";
+    const [result] = await pool.query(sql, [time_out, working_hours, attendanceId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Attendance record not found" });
     }
-
-    // 3️⃣ Compute working hours only if both exist
-    let workingHours = record.working_hours;
-    if (time_in && time_out) {
-      const [calc] = await pool.query(
-        `SELECT ROUND(TIME_TO_SEC(TIMEDIFF(?, ?)) / 3600, 2) AS hours`,
-        [time_out, time_in]
-      );
-      workingHours = calc[0].hours;
-    }
-
-    // 4️⃣ Update database
-    const sql = `
-      UPDATE attendance 
-      SET time_in = ?, time_out = ?, status = ?, working_hours = ?
-      WHERE id = ?
-    `;
-
-    await pool.query(sql, [time_in, time_out, newStatus, workingHours, attendanceId]);
-
-    res.json({ message: "✅ Attendance updated successfully", newStatus, workingHours });
-
+    res.json({ message: "✅ Attendance updated successfully" });
   } catch (err) {
     console.error("❌ Error updating attendance:", err);
     res.status(500).json({ error: "Failed to update attendance" });
+  }
+});
+
+// ======================================
+// ✅ NEW PUT: Update time_in + auto-update status + recalc working_hours
+// ======================================
+router.put("/attendance/:id/time-in", async (req, res) => {
+  const attendanceId = req.params.id;
+  const { time_in } = req.body;
+
+  try {
+    const [rows] = await pool.query("SELECT time_out FROM attendance WHERE id = ?", [attendanceId]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "Attendance record not found" });
+    }
+
+    const timeOut = rows[0].time_out;
+    let newStatus = "Absent";
+    let newWorkingHours = null;
+
+    if (time_in === null || time_in === undefined || time_in === "") {
+      newStatus = "Absent";
+      newWorkingHours = null;
+    } else {
+      let normalizedTimeIn = time_in;
+      if (/^\d{1,2}:\d{2}$/.test(time_in)) {
+        normalizedTimeIn = `${time_in}:00`;
+      }
+
+      const timeInSeconds = timeStringToSeconds(normalizedTimeIn);
+      if (timeInSeconds === null) {
+        return res.status(400).json({ error: "Invalid time_in format. Use 'HH:MM' or 'HH:MM:SS' or null." });
+      }
+
+      const cutoffSeconds = timeStringToSeconds("08:15:00");
+      newStatus = timeInSeconds > cutoffSeconds ? "Late" : "Present";
+
+      if (timeOut !== null) {
+        const timeOutStr = typeof timeOut === "string" ? timeOut : null;
+        const timeOutSeconds = timeStringToSeconds(timeOutStr);
+
+        if (timeOutSeconds !== null) {
+          let secondsDiff = timeOutSeconds - timeInSeconds;
+          if (secondsDiff < 0) secondsDiff = 0;
+          newWorkingHours = Math.round((secondsDiff / 3600) * 100) / 100;
+        }
+      }
+
+      req.body._normalizedTimeIn = normalizedTimeIn;
+    }
+
+    const updateSql = `
+      UPDATE attendance
+      SET time_in = ?, status = ?, working_hours = ?
+      WHERE id = ?
+    `;
+
+    const timeInForDb = (time_in === null || time_in === undefined || time_in === "") ? null : req.body._normalizedTimeIn;
+
+    const [updateResult] = await pool.query(updateSql, [timeInForDb, newStatus, newWorkingHours, attendanceId]);
+
+    if (updateResult.affectedRows === 0) {
+      return res.status(404).json({ error: "Attendance record not found (during update)" });
+    }
+
+    const [updatedRows] = await pool.query(
+      `SELECT id AS attendance_id, employee_id, fullname, date, temperature, time_in, time_out, status, working_hours FROM attendance WHERE id = ?`,
+      [attendanceId]
+    );
+
+    res.json({ message: "✅ time_in, status, and working_hours updated", attendance: updatedRows[0] });
+
+  } catch (err) {
+    console.error("❌ Error updating time_in:", err);
+    res.status(500).json({ error: "Failed to update time_in" });
   }
 });
 
