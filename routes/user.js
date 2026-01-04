@@ -90,6 +90,7 @@ router.post("/login", async (req, res) => {
 
     const user = rows[0];
 
+    // Hash the entered password
     const hashedPassword = crypto.createHash("md5").update(password).digest("hex");
 
     if (user.password !== hashedPassword) {
@@ -97,13 +98,24 @@ router.post("/login", async (req, res) => {
     }
 
     // Normalize role: trim spaces and lowercase
-    const normalizedRole = user.role.trim().toLowerCase();
+    const normalizedRole = user.role?.trim().toLowerCase();
+
+    console.log("User login successful:", {
+      username: user.username,
+      rawRole: user.role,
+      normalizedRole
+    });
+
+    // Validate role
+    if (normalizedRole !== 'admin' && normalizedRole !== 'employee') {
+      return res.status(400).json({ success: false, message: "Invalid role in database" });
+    }
 
     res.json({
       success: true,
       admin_name: user.admin_name,
       employee_id: user.employee_id,
-      role: normalizedRole, // always "admin" or "employee"
+      role: normalizedRole, // "admin" or "employee"
     });
   } catch (err) {
     console.error("Login error:", err);
