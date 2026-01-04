@@ -75,52 +75,62 @@ router.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
-    return res.status(400).json({ success: false, message: "Username and password are required" });
+    return res.status(400).json({
+      success: false,
+      message: "Username and password are required"
+    });
   }
 
   try {
     const [rows] = await pool.query(
-      "SELECT * FROM admins WHERE username = ?",
+      "SELECT employee_id, admin_name, username, password, role FROM admins WHERE username = ?",
       [username]
     );
 
     if (rows.length === 0) {
-      return res.status(401).json({ success: false, message: "Invalid username or password" });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid username or password"
+      });
     }
 
     const user = rows[0];
 
-    // Hash the entered password
-    const hashedPassword = crypto.createHash("md5").update(password).digest("hex");
+    const hashedPassword = crypto
+      .createHash("md5")
+      .update(password)
+      .digest("hex");
 
     if (user.password !== hashedPassword) {
-      return res.status(401).json({ success: false, message: "Invalid username or password" });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid username or password"
+      });
     }
 
-    // Normalize role: trim spaces and lowercase
-    const normalizedRole = user.role?.trim().toLowerCase();
+    // ✅ FORCE normalize role HERE
+    const role = String(user.role).trim().toLowerCase();
 
-    console.log("User login successful:", {
+    console.log("LOGIN OK:", {
       username: user.username,
-      rawRole: user.role,
-      normalizedRole
+      role
     });
 
-    // Validate role
-    if (normalizedRole !== 'admin' && normalizedRole !== 'employee') {
-      return res.status(400).json({ success: false, message: "Invalid role in database" });
-    }
-
-    res.json({
+    return res.json({
       success: true,
       admin_name: user.admin_name,
       employee_id: user.employee_id,
-      role: normalizedRole, // "admin" or "employee"
+      role
     });
+
   } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("LOGIN ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 });
+
 
 export default router;
