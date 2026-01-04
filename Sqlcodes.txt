@@ -1,0 +1,43 @@
+//admin database//
+
+CREATE TABLE "admins" (
+  "id" int NOT NULL AUTO_INCREMENT,
+  "employee_id" int NOT NULL,
+  "admin_name" varchar(100) NOT NULL,
+  "username" varchar(50) NOT NULL,
+  "password" varchar(255) NOT NULL,
+  PRIMARY KEY ("id"),
+  UNIQUE KEY "username" ("username"),
+  KEY "employee_id" ("employee_id"),
+  CONSTRAINT "admins_ibfk_1" FOREIGN KEY ("employee_id") REFERENCES "employees" ("employee_id")
+) 
+
+ CREATE TABLE "attendance" (
+  "id" int NOT NULL AUTO_INCREMENT,
+  "date" date NOT NULL,
+  "employee_id" int NOT NULL,
+  "fullname" varchar(100) DEFAULT NULL,
+  "temperature" decimal(5,2) DEFAULT NULL,
+  "status" enum('Present','Absent','Late') DEFAULT 'Present',
+  "time_in" time DEFAULT NULL,
+  "time_out" time DEFAULT NULL,
+  "working_hours" decimal(5,2) DEFAULT NULL,
+  PRIMARY KEY ("id"),
+  KEY "attendance_ibfk_1" ("employee_id"),
+  CONSTRAINT "attendance_ibfk_1" FOREIGN KEY ("employee_id") REFERENCES "employees" ("employee_id") ON DELETE CASCADE
+ )
+
+CREATE TABLE "employees" (
+  "id" int NOT NULL AUTO_INCREMENT,
+  "employee_id" int NOT NULL,
+  "name" varchar(100) NOT NULL,
+  "mobile_phone" varchar(20) DEFAULT NULL,
+  "date_of_birth" date DEFAULT NULL,
+  "image" longblob,
+  "face_embedding" text,
+  "fingerprint_id" varchar(100) DEFAULT NULL,
+  "status" enum('Active','Inactive') DEFAULT 'Active',
+  "image_mime" varchar(100) DEFAULT NULL,
+  PRIMARY KEY ("id"),
+  UNIQUE KEY "employee_id" ("employee_id")
+)
