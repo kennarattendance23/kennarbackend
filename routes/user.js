@@ -5,9 +5,9 @@ import sendEmail from "../utils/mailer.js";
 
 const router = express.Router();
 
-/* ================= CREATE ADMIN + OTP ================= */
+/* ================= CREATE USER (Admin or Employee) + OTP ================= */
 router.post("/admins", async (req, res) => {
-  const { employee_id, admin_name, username, position } = req.body;
+  const { employee_id, admin_name, username, position } = req.body; // position = admin or employee
 
   if (!employee_id || !admin_name || !username || !position) {
     return res.status(400).json({ message: "All fields are required" });
@@ -23,7 +23,7 @@ router.post("/admins", async (req, res) => {
       return res.status(409).json({ message: "Username already exists" });
     }
 
-    // 🔐 OTP
+    // Generate temporary password (OTP)
     const tempPassword = crypto.randomBytes(4).toString("hex");
     console.log("🔑 OTP generated:", tempPassword);
 
@@ -37,7 +37,7 @@ router.post("/admins", async (req, res) => {
       [employee_id, admin_name, username, hashedPassword, position]
     );
 
-    // 📧 SEND EMAIL (DO NOT FAIL USER CREATION)
+    // Send OTP via email (optional)
     try {
       await sendEmail({
         to: username,
@@ -59,10 +59,11 @@ router.post("/admins", async (req, res) => {
       employee_id,
       admin_name,
       username,
+      role: position
     });
   } catch (err) {
-    console.error("❌ Add admin error:", err);
-    res.status(500).json({ error: "Failed to add admin" });
+    console.error("❌ Add user error:", err);
+    res.status(500).json({ error: "Failed to add user" });
   }
 });
 
@@ -86,17 +87,18 @@ router.post("/login", async (req, res) => {
 
     const user = rows[0];
 
-    // Hash the password from login to compare with DB
     const hashedPassword = crypto.createHash("md5").update(password).digest("hex");
 
     if (user.password !== hashedPassword) {
       return res.status(401).json({ success: false, message: "Invalid username or password" });
     }
 
+    // Send role info to frontend
     res.json({
       success: true,
       admin_name: user.admin_name,
       employee_id: user.employee_id,
+      role: user.role, // admin or employee
     });
   } catch (err) {
     console.error("Login error:", err);
