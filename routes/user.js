@@ -5,7 +5,7 @@ import sendEmail from "../utils/mailer.js";
 
 const router = express.Router();
 
-/* ================= CREATE USER + OTP ================= */
+/* ================= CREATE ADMIN + OTP ================= */
 router.post("/admins", async (req, res) => {
   const { employee_id, admin_name, username, position } = req.body;
 
@@ -63,6 +63,44 @@ router.post("/admins", async (req, res) => {
   } catch (err) {
     console.error("❌ Add admin error:", err);
     res.status(500).json({ error: "Failed to add admin" });
+  }
+});
+
+/* ================= LOGIN ================= */
+router.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: "Username and password are required" });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      "SELECT * FROM admins WHERE username = ?",
+      [username]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ success: false, message: "Invalid username or password" });
+    }
+
+    const user = rows[0];
+
+    // Hash the password from login to compare with DB
+    const hashedPassword = crypto.createHash("md5").update(password).digest("hex");
+
+    if (user.password !== hashedPassword) {
+      return res.status(401).json({ success: false, message: "Invalid username or password" });
+    }
+
+    res.json({
+      success: true,
+      admin_name: user.admin_name,
+      employee_id: user.employee_id,
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
