@@ -7,11 +7,14 @@ const router = express.Router();
 
 /* ================= CREATE USER (Admin or Employee) + OTP ================= */
 router.post("/admins", async (req, res) => {
-  const { employee_id, admin_name, username, position } = req.body; // position = admin or employee
+  let { employee_id, admin_name, username, position } = req.body; // position = admin or employee
 
   if (!employee_id || !admin_name || !username || !position) {
     return res.status(400).json({ message: "All fields are required" });
   }
+
+  // Normalize role: trim spaces and lowercase
+  position = position.trim().toLowerCase(); // admin or employee
 
   try {
     const [existing] = await pool.query(
@@ -93,12 +96,14 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid username or password" });
     }
 
-    // Send role info to frontend
+    // Normalize role: trim spaces and lowercase
+    const normalizedRole = user.role.trim().toLowerCase();
+
     res.json({
       success: true,
       admin_name: user.admin_name,
       employee_id: user.employee_id,
-      role: user.role, // admin or employee
+      role: normalizedRole, // always "admin" or "employee"
     });
   } catch (err) {
     console.error("Login error:", err);
